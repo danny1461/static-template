@@ -1,0 +1,22 @@
+{
+    "dev_mode": false,
+    "default_language": "en",
+    "code_language": "en",
+    "enforce_language_prefix": false,
+    "other_languages": [],
+
+    "language_names": {
+        "en": "English",
+        "es": "Español"
+    },
+
+    "aliases": {
+        "subpage": {
+            "es": "subpagina"
+        }
+    },
+
+    "custom": {
+        "GTM": ""
+    }
+}

@@ -1,0 +1,1 @@
+Any *.php file in this folder will be included before rendering begins

@@ -1,0 +1,34 @@
+// open up css/bootstrap/_variables.scss to see what you can override
+$grid-breakpoints: (
+	xs: 0,
+	sm: 576px,
+	md: 768px,
+	lg: 992px,
+	xl: 1200px,
+	xxl: 1400px,
+	full: 1900px,
+	wide: 3000px,
+);
+
+$container-max-widths: (
+	sm: 420px,
+	md: 720px,
+	lg: 960px,
+	xl: 1140px,
+	xxl: 1320px,
+	full: 1500px,
+	wide: 2000px
+);
+
+$breadcrumb-divider: quote("|");
+
+$spacers: map-merge(
+	$spacers,
+	(
+		6: ($spacer * 6),
+		7: ($spacer * 9),
+		8: ($spacer * 12),
+		50: 50px,
+		100: 100px
+	)
+);
