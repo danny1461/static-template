@@ -10,10 +10,15 @@ define('ISLOCAL',
 	in_array($_SERVER['REMOTE_ADDR'], array('127.0.0.1'))
 );
 
-require WEB_ROOT . '/functions.php';
 
 global $_SITE;
 $_SITE = new stdClass();
+$_SITE->config = json_decode(file_get_contents(WEB_ROOT . '/config.json'), true);
+$_SITE->all_languages = array_merge(array($_SITE->config['default_language']), $_SITE->config['other_languages']);
+$_SITE->is_multilingual = count($_SITE->all_languages) > 1;
+$_SITE->current_lang = $_SITE->config['default_language'];
+
+require WEB_ROOT . '/functions.php';
 
 /*
 
@@ -88,25 +93,6 @@ MM.      ,MP   MM     MM    MM 8M""""""  MM             `MM A'  ,pm9MM    MM    
 
 
 */
-$_SITE->headMeta = array();
-$_SITE->titleSeparator = ' | ';
-$_SITE->titleParts = array();
-$_SITE->scripts = array(
-	'collection' => new Dep_Collection(),
-	'header' => array(),
-	'footer' => array()
-);
-$_SITE->stylesheets = array(
-	'collection' => new Dep_Collection(),
-	'header' => array(),
-	'footer' => array()
-);
-$_SITE->dpmResourcesAdded = false;
-$_SITE->elementClasses = array();
-$_SITE->config = json_decode(file_get_contents(WEB_ROOT . '/config.json'), true);
-$_SITE->all_languages = array_merge(array($_SITE->config['default_language']), $_SITE->config['other_languages']);
-$_SITE->is_multilingual = count($_SITE->all_languages) > 1;
-$_SITE->current_lang = $_SITE->config['default_language'];
 
 // Process aliases
 if ($_SITE->is_multilingual && isset($_SITE->config['aliases'])) {
@@ -250,15 +236,20 @@ foreach (array('_template', '404') as $toConsider) {
 	}
 }
 
-$_SITE->templateCandidates = array_filter($_SITE->templateCandidates);
+$_SITE->templateCandidates = doFilter('template_candidates', array_filter($_SITE->templateCandidates));
 
 foreach ($_SITE->templateCandidates as $path) {
 	if (is_file(WEB_ROOT . '/templates/pages/' . $path . '.php')) {
 		$_SITE->template = $path;
 		$_SITE->rejected_template = false;
 
+		$_file = WEB_ROOT . '/templates/pages/' . $_SITE->template . '.php';
+		doAction('before_include', $_file);
+
 		ob_start();
-		require WEB_ROOT . '/templates/pages/' . $_SITE->template . '.php';
+		require $_file;
+
+		doAction('after_include', $_file);
 
 		if ($_SITE->rejected_template) {
 			ob_end_clean();

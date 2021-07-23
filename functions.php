@@ -19,6 +19,197 @@ if (!defined('WEB_ROOT')) {
 
 */
 
+$_SITE->hooks = [];
+
+/**
+ * Queues a function to allow modification of hook data
+ * 
+ * @param mixed $name 
+ * @param mixed $callable 
+ * @param int $priority 
+ * @return void 
+ */
+function addFilter($name, $callable, $priority = 10) {
+	global $_SITE;
+
+	if (!isset($_SITE->hooks[$name])) {
+		$_SITE->hooks[$name] = [
+			'sorted' => false,
+			'calls' => [],
+			'order' => []
+		];
+	}
+
+	$_SITE->hooks[$name]['sorted'] = false;
+	$_SITE->hooks[$name]['calls'][] = $callable;
+	$_SITE->hooks[$name]['order'][] = $priority;
+}
+
+/**
+ * Queues a function to be called on a particular hook
+ * 
+ * @param mixed $name 
+ * @param mixed $callable 
+ * @param int $priority 
+ * @return void 
+ */
+function addAction($name, $callable, $priority = 10) {
+	addFilter($name, $callable, $priority);
+}
+
+/**
+ * Executes a hook and returns the original or modified data
+ * 
+ * @param mixed $name 
+ * @param mixed $args 
+ * @return mixed 
+ */
+function doFilter($name, ...$args) {
+	global $_SITE;
+
+	if (!isset($_SITE->hooks[$name])) {
+		return reset($args);
+	}
+
+	if (!$_SITE->hooks[$name]['sorted']) {
+		array_multisort($_SITE->hooks[$name]['order'], $_SITE->hooks[$name]['calls']);
+		$_SITE->hooks[$name]['sorted'] = true;
+	}
+
+	foreach ($_SITE->hooks[$name]['calls'] as $fn) {
+		$args[0] = $fn(...$args);
+	}
+
+	return $args[0];
+}
+
+/**
+ * Executes a hook
+ * 
+ * @param mixed $name 
+ * @param mixed $args 
+ * @return void 
+ */
+function doAction($name, ...$args) {
+	global $_SITE;
+
+	if (!isset($_SITE->hooks[$name])) {
+		return;
+	}
+
+	if (!$_SITE->hooks[$name]['sorted']) {
+		array_multisort($_SITE->hooks[$name]['order'], $_SITE->hooks[$name]['calls']);
+		$_SITE->hooks[$name]['sorted'] = true;
+	}
+
+	foreach ($_SITE->hooks[$name]['calls'] as $fn) {
+		$fn(...$args);
+	}
+}
+
+$_SITE->portals = [];
+$_SITE->portalData = [];
+$_SITE->portalDepth = [];
+
+/**
+ * Queues data to be output elsewhere
+ * 
+ * @param mixed $name 
+ * @return void 
+ */
+function portal_to($name, $data = null) {
+	global $_SITE;
+
+	if (is_null($data)) {
+		$_SITE->portals[] = $name;
+		$_SITE->portalDepth[] = 0;
+		ob_start();
+	}
+	else {
+		if (!isset($_SITE->portalData[$name])) {
+			$_SITE->portalData[$name] = '';
+		}
+	
+		$_SITE->portalData[$name] .= $data;
+	}
+}
+
+/**
+ * Wipe out data that might have been queued
+ * 
+ * @param mixed $name 
+ * @return void 
+ */
+function portal_clear_data($name) {
+	global $_SITE;
+	unset($_SITE->portalData[$name]);
+}
+
+/**
+ * Ends a portal buffer
+ * 
+ * @return void 
+ */
+function portal_end() {
+	global $_SITE;
+
+	if (!count($_SITE->portals)) {
+		while (ob_get_length()) {
+			ob_get_clean();
+		}
+
+		throw new Exception('No portal buffer started');
+	}
+
+	$name = array_pop($_SITE->portals);
+	array_pop($_SITE->portalDepth);
+
+	if (!isset($_SITE->portalData[$name])) {
+		$_SITE->portalData[$name] = '';
+	}
+
+	$_SITE->portalData[$name] .= ob_get_clean();
+}
+
+/**
+ * Returns any queued data
+ * 
+ * @param mixed $name 
+ * @return mixed 
+ */
+function portal_get_data($name) {
+	global $_SITE;
+
+	return isset($_SITE->portalData[$name])
+		? $_SITE->portalData[$name]
+		: '';
+}
+
+addAction('before_include', function() {
+	global $_SITE;
+
+	if (count($_SITE->portalDepth)) {
+		$_SITE->portalDepth[count($_SITE->portalDepth) - 1]++;
+	}
+});
+
+addAction('after_include', function() {
+	global $_SITE;
+
+	if (count($_SITE->portalDepth)) {
+		$lastNdx = count($_SITE->portalDepth) - 1;
+		$_SITE->portalDepth[$lastNdx]--;
+
+		if ($_SITE->portalDepth[$lastNdx] < 0) {
+			while (ob_get_length()) {
+				ob_get_clean();
+			}
+
+			throw new Exception('Portal contents need to be ended in the same file they are started');
+		}
+	}
+});
+
 /**
  * Loads and echos a layout header.php file
  * 
@@ -72,8 +263,14 @@ function get_footer($name = 'default') {
  * @return string
  */
 function get_partial($name, $data = array()) {
+	$_file = WEB_ROOT . "/templates/partials/{$name}.php";
+
+	doAction('before_include', $_file);
+
 	extract($data);
 	require WEB_ROOT . "/templates/partials/{$name}.php";
+
+	doAction('after_include', $_file);
 }
 
 /**
@@ -398,6 +595,8 @@ function is_lang($lang) {
 	return current_lang() == $lang;
 }
 
+$_SITE->headMeta = array();
+
 function _transformMetaKey($keyOrProps, $val) {
 	if (is_string($keyOrProps)) {
 		$key = $keyOrProps;
@@ -464,6 +663,9 @@ function remove_meta($keyOrProps) {
 	}
 }
 
+$_SITE->titleSeparator = ' | ';
+$_SITE->titleParts = array();
+
 /**
  * Appends or prepends a part to the meta title
  * 
@@ -505,6 +707,8 @@ function title_separator($sep) {
 	global $_SITE;
 	$_SITE->titleSeparator = $sep;
 }
+
+$_SITE->elementClasses = array();
 
 /**
  * Builds list of arbitrary classes for arbitrary elements
@@ -550,6 +754,12 @@ function bodyClass($classes = false, $remove = false) {
 	return elementClasses('body', $classes, $remove);
 }
 
+$_SITE->scripts = array(
+	'collection' => new Dep_Collection(),
+	'header' => array(),
+	'footer' => array()
+);
+
 /**
  * Enqueues a script to be rendered into the head area
  * 
@@ -583,6 +793,12 @@ function script_register($name, $urlOrSrc, $deps = array()) {
 	global $_SITE;
 	$_SITE->scripts['collection']->addResource($name, $urlOrSrc, $deps);
 }
+
+$_SITE->stylesheets = array(
+	'collection' => new Dep_Collection(),
+	'header' => array(),
+	'footer' => array()
+);
 
 /**
  * Enqueues a stylesheet to be rendered into the head area
@@ -655,6 +871,7 @@ function header_resources() {
 	_output_stylesheets($_SITE->stylesheets['header']);
 	_output_scripts($_SITE->scripts['header']);
 	echo implode(PHP_EOL, $_SITE->headMeta);
+	echo portal_get_data('header');
 }
 
 /**
@@ -665,6 +882,7 @@ function footer_resources() {
 	global $_SITE;
 	_output_stylesheets($_SITE->stylesheets['footer']);
 	_output_scripts($_SITE->scripts['footer']);
+	echo portal_get_data('footer');
 }
 
 /**
@@ -691,6 +909,8 @@ function read_data($fileName, $useCache = true, $options = null) {
 
 	return $tmp;
 }
+
+$_SITE->dpmResourcesAdded = false;
 
 /**
  * Debugs the given input by echoing debug content for viewing by the dev in the browser
