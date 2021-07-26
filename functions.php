@@ -303,6 +303,47 @@ function baseUrl($url = '', $lang = false) {
 }
 
 /**
+ * Prepends the site's baseurl and '/public/ to the $url parameter.
+ * 
+ * @param string $url 
+ * @return string 
+ */
+function publicUrl($url = '') {
+	global $_SITE;
+	return $_SITE->baseUrl . 'public/' . ltrim($url, '/');
+}
+
+/**
+ * Returns a file system path to requested path
+ * 
+ * @param string $path 
+ * @return string
+ */
+function filePath($path = '') {
+	return WEB_ROOT . '/' . ltrim($path, '/\\');
+}
+
+/**
+ * Returns a file system path to the request public asset file
+ * 
+ * @param string $path 
+ * @return string 
+ */
+function publicFilePath($path = '') {
+	return WEB_ROOT . '/public/' . ltrim($path, '/\\');
+}
+
+/**
+ * Prepends a site's baseurl and '/public/' and appends a timestamp query var to the $url parameter
+ * 
+ * @param string $url 
+ * @return string 
+ */
+function publicHashedUrl($url = '') {
+	return publicUrl($url) . '?t=' . filemtime(publicFilePath($url));
+}
+
+/**
  * Converts a multilingual url to another language
  * 
  * @param mixed $url 
@@ -474,17 +515,6 @@ function get_config($var) {
 	global $_SITE;
 
 	return _drillDown($_SITE->config['custom'], $var);
-}
-
-/**
- * Prepends the site's baseurl and '/public/ to the $url parameter.
- * 
- * @param string $url 
- * @return string 
- */
-function publicUrl($url = '') {
-	global $_SITE;
-	return $_SITE->baseUrl . 'public/' . ltrim($url, '/');
 }
 
 /**
