@@ -1455,3 +1455,540 @@ abstract class ViewModel {
 		return $result;
 	}
 }
+
+interface IFormValidationResult {
+	/**
+	 * Returns the transformed data from the FormSpec
+	 * 
+	 * @return array 
+	 */
+	function getData(): array;
+	/**
+	 *  Returns the transformed data for the given field
+	 * 
+	 * @param mixed $name 
+	 * @return mixed 
+	 */
+	function getFieldData($name);
+	/**
+	 * Returns whether there are any errors set
+	 * 
+	 * @return bool 
+	 */
+	function hasErrors(): bool;
+	/**
+	 * Returns all the errors set for a given field
+	 * 
+	 * @param string $name 
+	 * @return mixed 
+	 */
+	function getFieldErrors($name);
+	/**
+	 * Returns the total number of errors
+	 * 
+	 * @return int 
+	 */
+	function errorCount(): int;
+	/**
+	 * Returns all the errors set
+	 * 
+	 * @return array 
+	 */
+	function getAllErrors(): array;
+}
+
+interface IFormValidator {
+	/**
+	 * Runs form validators against given data
+	 * 
+	 * @param array $data 
+	 * @param bool $allErrors
+	 * @return IFormValidationResult 
+	 */
+	function validate(array $data, bool $allErrors = false): IFormValidationResult;
+}
+
+interface IFormFieldSpec {
+	/**
+	 * Sets the field as required
+	 * 
+	 * @param string $message
+	 * @return static
+	 */
+	function setRequired($message = ''): IFormFieldSpec;
+	/**
+	 * Uses the result of the given callback to determine if this field is required
+	 * 
+	 * @param string $message
+	 * @param callable<FormValidator> $conditional 
+	 * @return IFormFieldSpec 
+	 */
+	function setConditionalRequired(callable $conditional, $message = ''): IFormFieldSpec;
+	/**
+	 * Casts given values for this field to string
+	 * 
+	 * @return IFormFieldSpec 
+	 */
+	function setStringType(): IFormFieldSpec;
+	/**
+	 * Casts given values for this field to int
+	 * 
+	 * @return IFormFieldSpec 
+	 */
+	function setIntType(): IFormFieldSpec;
+	/**
+	 * Casts given values for this field to bool
+	 * 
+	 * @return IFormFieldSpec 
+	 */
+	function setBoolType(): IFormFieldSpec;
+	/**
+	 * Sets this field as being an array of values
+	 * 
+	 * @return IFormFieldSpec 
+	 */
+	function setIsArray(): IFormFieldSpec;
+	/**
+	 * Provides a tranformation function for the field value
+	 * 
+	 * @param callable $transformer 
+	 * @return IFormFieldSpec 
+	 */
+	function setValueTranformer($transformer): IFormFieldSpec;
+	/**
+	 * Ensures the value matches the given regex
+	 * 
+	 * @param string $regex 
+	 * @param string $message 
+	 * @return IFormFieldSpec 
+	 */
+	function addRegexValidator($regex, $message = ''): IFormFieldSpec;
+	/**
+	 * Ensures the value is within a certain range
+	 * 
+	 * @param mixed|null $minValue 
+	 * @param mixed|null $maxValue 
+	 * @param string $message 
+	 * @return IFormFieldSpec 
+	 */
+	function addMinMaxValueValidator($minValue = null, $maxValue = null, $message = ''): IFormFieldSpec;
+	/**
+	 * Ensures the value is within a certain length
+	 * 
+	 * @param mixed|null $minLength 
+	 * @param mixed|null $maxLength 
+	 * @param string $message 
+	 * @return IFormFieldSpec 
+	 */
+	function addLengthValidator($minLength = null, $maxLength = null, $message = ''): IFormFieldSpec;
+	/**
+	 * Ensures the value is one of a given list
+	 * 
+	 * @param array $choices 
+	 * @param string $message 
+	 * @return IFormFieldSpec 
+	 */
+	function addChoiceValidator($choices, $message = ''): IFormFieldSpec;
+	/**
+	 * Runs custom validator against value
+	 * 
+	 * @param callable $callback should return true for success or string for error message
+	 * @return IFormFieldSpec 
+	 */
+	function addCustomValidator($callback): IFormFieldSpec;
+	/**
+	 * Ensures the value is a valid email
+	 * 
+	 * @param string $message 
+	 * @return IFormFieldSpec 
+	 */
+	function addEmailValidator($message = ''): IFormFieldSpec;
+}
+class FormValidationResult implements IFormValidationResult, Countable {
+	private $data = [];
+	private $errors = [];
+	private $errorNum = 0;
+
+	/**
+	 * Sets the data for this result
+	 * 
+	 * @param array $data 
+	 * @return void 
+	 */
+	public function setData(array $data) {
+		$this->data = $data;
+	}
+
+	public function getData(): array {
+		return $this->data;
+	}
+
+	public function getFieldData($name) {
+		return array_key_exists($name, $this->data)
+			? $this->data[$name]
+			: null;
+	}
+
+	public function hasErrors(): bool {
+		return $this->errorNum > 0;
+	}
+
+	public function errorCount(): int {
+		return $this->errorNum;
+	}
+
+	public function count() {
+		return $this->errorNum;
+	}
+
+	public function getFieldErrors($name) {
+		return array_key_exists($name, $this->errors)
+			? $this->errors[$name]
+			: null;
+	}
+
+	public function addFieldError(string $name, string $msg) {
+		if (!isset($this->errors[$name])) {
+			$this->errors[$name] = [];
+		}
+
+		$this->errors[$name][] = $msg;
+		$this->errorNum++;
+	}
+
+	public function getAllErrors(): array {
+		return $this->errors;
+	}
+}
+
+// TODO: Add FormBuilder that accepts a FormSpec
+class FormSpec {
+	private $fields = [];
+
+	/**
+	 * Adds a field to the form
+	 * 
+	 * @param string $name 
+	 * @return IFormFieldSpec 
+	 */
+	public function addField($name) {
+		$this->fields[$name] = new FormFieldSpec();
+		return $this->fields[$name];
+	}
+
+	/**
+	 * 
+	 * @return IFormValidator
+	 */
+	public function getValidator() {
+		return new FormValidator($this->fields);
+	}
+
+	public function getFields() {
+		return $this->fields;
+	}
+}
+
+class FormFieldSpec implements IFormFieldSpec {
+	private $required = false;
+	private $transformer = null;
+	private $isArray = false;
+	private $validators = [];
+
+	public function setRequired($message = ''): IFormFieldSpec {
+		$this->required = function($fieldName) use ($message) {
+			return $message ?: "{$fieldName} is required";
+		};
+
+		return $this;
+	}
+
+	public function setConditionalRequired(callable $conditional, $message = ''): IFormFieldSpec {
+		$this->required = function($fieldName, $form) use ($conditional, $message) {
+			$result = $conditional($fieldName, $form);
+
+			if ($result === true) {
+				return $message ?: "{$fieldName} is required";
+			}
+
+			return $result;
+		};
+
+		return $this;
+	}
+
+	public function setStringType(): IFormFieldSpec {
+		$this->transformer = 'strval';
+		return $this;
+	}
+
+	public function setIntType(): IFormFieldSpec {
+		$this->transformer = 'intval';
+		return $this;
+	}
+
+	public function setBoolType(): IFormFieldSpec {
+		$this->transformer = 'boolval';
+		return $this;
+	}
+
+	public function setIsArray(): IFormFieldSpec {
+		$this->isArray = true;
+		return $this;
+	}
+
+	public function setValueTranformer($transformer): IFormFieldSpec {
+		$this->transformer = $transformer;
+		return $this;
+	}
+
+	function addRegexValidator($regex, $message = ''): IFormFieldSpec {
+		$this->validators[] = function($value, $fieldName) use ($message, $regex) {
+			if (!preg_match($regex, $value)) {
+				return $message ?: "{$fieldName} should match regex";
+			}
+
+			return true;
+		};
+
+		return $this;
+	}
+
+	function addMinMaxValueValidator($minValue = null, $maxValue = null, $message = ''): IFormFieldSpec {
+		$this->validators[] = function($value, $fieldName) use ($message, $minValue, $maxValue) {
+			if (!$message) {
+				$message = "{$fieldName} should be ";
+				if (!is_null($minValue)) {
+					$message .= 'greater than ' . $minValue . ' and ';
+				}
+	
+				if (!is_null($maxValue)) {
+					$message .= 'less than ' . $maxValue;
+				}
+			}
+
+			if (!is_null($minValue) && $value < $minValue) {
+				return $message;
+			}
+
+			if (!is_null($maxValue) && $value > $maxValue) {
+				return $message;
+			}
+
+			return true;
+		};
+
+		return $this;
+	}
+
+	function addLengthValidator($minLength = null, $maxLength = null, $message = ''): IFormFieldSpec {
+		$this->validators[] = function($value, $fieldName) use ($message, $minLength, $maxLength) {
+			if (!$message) {
+				$message = "{$fieldName} should have a length ";
+				if (!is_null($minLength)) {
+					$message .= 'greater than ' . $minLength . ' and ';
+				}
+	
+				if (!is_null($maxLength)) {
+					$message .= 'less than ' . $maxLength;
+				}
+			}
+
+			if (!is_null($minLength) && strlen($value) < $minLength) {
+				return $message;
+			}
+
+			if (!is_null($maxLength) && strlen($value) > $maxLength) {
+				return $message;
+			}
+
+			return true;
+		};
+
+		return $this;
+	}
+
+	function addChoiceValidator($choices, $message = ''): IFormFieldSpec {
+		$this->validators[] = function($value, $fieldName) use ($message, $choices) {
+			if (!in_array($value, $choices)) {
+				return $message ?: "{$fieldName} should be one of " . implode(', ', $choices);
+			}
+
+			return true;
+		};
+
+		return $this;
+	}
+
+	function addCustomValidator($callback): IFormFieldSpec {
+		$this->validators[] = $callback;
+
+		return $this;
+	}
+
+	function addEmailValidator($message = ''): IFormFieldSpec {
+		$this->validators[] = function($value, $fieldName) use ($message) {
+			if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+				return $message ?: "{$fieldName} should be a valid email address";
+			}
+
+			return true;
+		};
+
+		return $this;
+	}
+
+	/**
+	 * Returns whether this field is required
+	 * 
+	 * @param FormValidator $form 
+	 * @return bool 
+	 */
+	public function getIsRequired(FormValidator $form, $fieldName) {
+		$value = $this->required;
+
+		if (is_callable($value)) {
+			$value = $value($fieldName, $form);
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Transforms value type
+	 * 
+	 * @param mixed $value 
+	 * @return mixed 
+	 */
+	public function transformValue($value) {
+		if ($this->transformer) {
+			$fn = $this->transformer;
+			$value = $fn($value);
+		}
+
+		return $value;
+	}
+
+	/**
+	 * Returns array of error messages
+	 * 
+	 * @param mixed $value 
+	 * @param FormValidator $form 
+	 * @param bool $allErrors 
+	 * @return array 
+	 */
+	public function isValid($value, FormValidator $form, $fieldName, $allErrors) {
+		$errors = [];
+
+		if ($this->isArray && !is_array($value)) {
+			$errors[] = 'array expected';
+
+			if (!$allErrors) {
+				return $errors;
+			}
+		}
+
+		if (!is_array($value)) {
+			$value = [$value];
+		}
+
+		foreach ($value as $val) {
+			foreach ($this->validators as $fn) {
+				$result = $fn($val, $fieldName, $form);
+	
+				if (is_string($result)) {
+					$errors[] = $result;
+
+					if (!$allErrors) {
+						return $errors;
+					}
+				}
+			}
+		}
+
+		return $errors;
+	}
+}
+
+class FormValidator implements IFormValidator {
+	/** @var FormFieldSpec[] */
+	private $fields;
+
+	/** @var array */
+	private $data = null;
+
+	public function __construct($fields) {
+		$this->fields = $fields;
+	}
+
+	public function validate(array $data, bool $allErrors = false): IFormValidationResult {
+		if (!is_null($this->data)) {
+			throw new Exception('validate already running');
+		}
+
+		$this->data = $data;
+		$result = new FormValidationResult();
+
+		// Transform values
+		foreach ($this->fields as $fieldName => $field) {
+			try {
+				$value = $this->getFieldValue($fieldName);
+				$this->data[$fieldName] = empty($value)
+					? null
+					: $field->transformValue($this->getFieldValue($fieldName));
+			}
+			catch (Exception $e) {
+				$result->addFieldError($fieldName, $e->getMessage());
+			}
+		}
+
+		// Validate
+		foreach ($this->fields as $fieldName => $field) {
+			try {
+				$value = $this->getFieldValue($fieldName);
+				
+				// Is empty?
+				if (empty($value)) {
+					// Check is required
+					$requiredMessage = $field->getIsRequired($this, $fieldName);
+					if ($requiredMessage) {
+						$result->addFieldError($fieldName, $requiredMessage);
+
+						if (!$allErrors) {
+							continue;
+						}
+					}
+					else {
+						continue;
+					}
+				}
+
+				// Run validators
+				$errors = $field->isValid($value, $this, $fieldName, $allErrors);
+				foreach ($errors as $message) {
+					$result->addFieldError($fieldName, $message);
+				}
+			}
+			catch (Exception $e) {
+				$result->addFieldError($fieldName, $e->getMessage());
+			}
+		}
+
+		$result->setData($this->data);
+		$this->data = null;
+
+		return $result;
+	}
+
+	/**
+	 * Fetches a value for a field by name
+	 * 
+	 * @param string $name 
+	 * @return mixed 
+	 */
+	public function getFieldValue($name) {
+		return array_key_exists($name, $this->data)
+			? $this->data[$name]
+			: null;
+	}
+}
