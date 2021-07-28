@@ -10,6 +10,22 @@ define('ISLOCAL',
 	in_array($_SERVER['REMOTE_ADDR'], array('127.0.0.1'))
 );
 
+if (!isset($_SERVER['ENVIRONMENT'])) {
+	$_SERVER['ENVIRONMENT'] = ISLOCAL ? 'development' : 'production';
+}
+
+define('ENVIRONMENT', strtolower($_SERVER['ENVIRONMENT']));
+
+if (file_exists(WEB_ROOT . '/libs/vendor/autoloader.php')) {
+	require WEB_ROOT . '/libs/vendor/autoloader.php';
+}
+
+spl_autoload_register(function($classOrFunction) {
+	$filePath = WEB_ROOT . '/libs/' . $classOrFunction . '.php';
+	if (is_file($filePath)) {
+		include $filePath;
+	}
+});
 
 global $_SITE;
 $_SITE = new stdClass();
@@ -19,6 +35,8 @@ $_SITE->is_multilingual = count($_SITE->all_languages) > 1;
 $_SITE->current_lang = $_SITE->config['default_language'];
 
 require WEB_ROOT . '/functions.php';
+
+EnvShim::init();
 
 /*
 
@@ -68,17 +86,6 @@ error_reporting($_SITE->errorLevel);
 foreach (glob(WEB_ROOT . '/inc/*.php') as $path) {
 	require $path;
 }
-
-if (file_exists(WEB_ROOT . '/libs/vendor/autoloader.php')) {
-	require WEB_ROOT . '/libs/vendor/autoloader.php';
-}
-
-spl_autoload_register(function($classOrFunction) {
-	$filePath = WEB_ROOT . '/libs/' . $classOrFunction . '.php';
-	if (is_file($filePath)) {
-		include $filePath;
-	}
-});
 
 /*
 

@@ -258,6 +258,8 @@ function get_footer($name = 'default') {
  * @var VIEW_MODEL $model
  * to enjoy intellisense autocomplete
  * 
+ * ViewModels can extend Core\ViewModel for simplicity
+ * 
  * @param mixed $name template name minus .php
  * @param array $data optional data payload
  * @return string
@@ -751,7 +753,7 @@ $_SITE->elementClasses = array();
 function elementClasses($name, $classes = false, $remove = false) {
 	global $_SITE;
 	if (!isset($_SITE->elementClasses[$name])) {
-		$_SITE->elementClasses[$name] = new ElementClasses();
+		$_SITE->elementClasses[$name] = new Core\ElementClasses();
 	}
 
 	if ($classes) {
@@ -785,7 +787,7 @@ function bodyClass($classes = false, $remove = false) {
 }
 
 $_SITE->scripts = array(
-	'collection' => new Dep_Collection(),
+	'collection' => new Core\Dep_Collection(),
 	'header' => array(),
 	'footer' => array()
 );
@@ -825,7 +827,7 @@ function script_register($name, $urlOrSrc, $deps = array()) {
 }
 
 $_SITE->stylesheets = array(
-	'collection' => new Dep_Collection(),
+	'collection' => new Core\Dep_Collection(),
 	'header' => array(),
 	'footer' => array()
 );
@@ -930,7 +932,7 @@ function read_data($fileName, $useCache = true, $options = null) {
 		return $_SITE->dataCache[$fileName];
 	}
 
-	$tmp = new DA_Static_Data($fileName, $options);
+	$tmp = new Core\Static_Data($fileName, $options);
 	$tmp = $tmp->readFile();
 
 	if ($useCache) {
@@ -1201,794 +1203,79 @@ MM.           MM   ,pm9MM  `YMMMa. `YMMMa. 8M"""""" `YMMMa.
 
 
 */
-class Dep_Collection {
-	public $resources = array();
-	
-	public function addResource($name, $payload, $deps = array()) {
-		$this->resources[$name] = array(
-			'name' => $name,
-			'deps' => $deps,
-			'payload' => $payload
-		);
-	}
-	
-	private function orderDeps(&$list, $res, $circular = array()) {
-		if (in_array($res['name'], $circular)) {
-			throw new Exception("Circular dependency! One of {$res['name']}'s dependencies require {$res['name']}.");
-		}
-		
-		$circular[] = $res['name'];
-		
-		foreach ($res['deps'] as $dep) {
-			if (!isset($this->resources[$dep])) {
-				continue;
-			}
-			
-			if (!in_array($dep, $list)) {
-				$this->orderDeps($list, $this->resources[$dep], $circular);
-			}
-		}
-		
-		$list[] = $res['name'];
-	}
-	
-	public function getOrderedList($needed = false) {
-		if ($needed === false) {
-			$needed = array_keys($this->resources);
-		}
-		
-		$list = array();
-		foreach ($needed as $dep) {
-			if (!isset($this->resources[$dep])) {
-				continue;
-			}
-			
-			if (!in_array($dep, $list)) {
-				$this->orderDeps($list, $this->resources[$dep]);
-			}
-		}
-		
-		$result = array();
-		foreach ($list as $name) {
-			$result[] = $this->resources[$name]['payload'];
-		}
-		
-		return $result;
-	}
-}
 
-class ElementClasses {
-	public $classes = array();
+/**
+ * Class to load environment variables from local .env files
+ */
+class EnvShim implements ArrayAccess, JsonSerializable {
+	private $data = null;
 
-	public function add($classes) {
-		if (is_string($classes)) {
-			$classes = explode(' ', $classes);
-			$classes = array_map('trim', $classes);
-		}
+	public function jsonSerialize() {
+		$this->load();
 
-		$this->classes = array_merge($this->classes, array_filter($classes));
-	}
-
-	public function remove($classes) {
-		if (is_string($classes)) {
-			$classes = explode(' ', $classes);
-			$classes = array_map('trim', $classes);
-			$classes = array_filter($classes);
-		}
-
-		$this->classes = array_diff($this->classes, $classes);
-	}
-
-	public function getClassString() {
-		return implode(' ', $this->classes);
-	}
-}
-
-class DA_Static_Data {
-	private $file;
-	private $ext;
-	private $opts;
-	private $readable = false;
-	
-	public function __construct($fileName, $options = null) {
-		$fileName = str_replace('\\', '/', $fileName);
-		$this->opts = $options;
-		$this->updateFile($fileName);
-		
-		if (strpos($this->file, '/') !== false) {
-			if (!is_file($this->file)) {
-				return;
-			}
-		}
-		else {
-			if ($this->ext) {
-				$this->file = WEB_ROOT . '/data/' . $this->file;
-				if (!is_file($this->file)) {
-					return;
-				}
-			}
-			else {
-				foreach (glob(WEB_ROOT . '/data/' . $this->file . '.*') as $file) {
-					$this->updateFile($file);
-					break;
-				}
-				
-				if (!is_file($this->file)) {
-					return;
-				}
-			}
-		}
-		
-		$this->readable = true;
-	}
-	
-	private function updateFile($path) {
-		$this->file = $path;
-		
-		$this->ext = strrpos($this->file, '.');
-		if ($this->ext !== false) {
-			$this->ext = substr($this->file, $this->ext + 1);
-			if (strpos($this->ext, '/') !== false) {
-				$this->ext = false;
-			}
-		}
-	}
-	
-	public function readFile() {
-		if (!$this->readable) {
-			return false;
-		}
-		
-		$func = 'readFile_' . strtoupper($this->ext);
-		if (!method_exists($this, $func)) {
-			return false;
-		}
-		
-		return $this->$func();
-	}
-	
-	private function readFile_CSV() {
-		if (!is_array($this->opts)) {
-			$this->opts = array();
-		}
-		
-		$this->opts = array_merge(array(
-			'headers' => false,
-			'objects' => false
-		), $this->opts);
-		
-		$fp = fopen($this->file, 'r');
-		$content = array();
-		$headers = false;
-		
-		while ($arr = fgetcsv($fp)) {
-			if ($this->opts['headers']) {
-				if (!$headers) {
-					$headers = $arr;
-				}
-				else {
-					$arr2 = array();
-					foreach ($arr as $ndx => $val) {
-						if (isset($headers[$ndx])) {
-							$arr2[$headers[$ndx]] = $val;
-						}
-						else {
-							$arr2["col_{$ndx}"] = $val;
-						}
-					}
-					
-					$content[] = $this->opts['objects'] ? (object)$arr2 : $arr2;
-				}
-			}
-			else {
-				$content[] = $this->opts['objects'] ? (object)$arr : $arr;
-			}
-		}
-		
-		return $content;
-	}
-	
-	private function readFile_JSON() {
-		if (is_null($this->opts)) {
-			$this->opts = true;
-		}
-		
-		$content = file_get_contents($this->file);
-		return json_decode($content, $this->opts);
-	}
-	
-	private function readFile_INI() {
-		$content = parse_ini_file($this->file, true);
-		
-		$skippedOne = true;
-		$progress = true;
-		$depFound = false;
-		while ($skippedOne && $progress) {
-			$skippedOne = false;
-			$progress = false;
-			$depFound = false;
-			foreach ($content as $key => $vals) {
-				if (strpos($key, ':') !== false) {
-					$depFound = true;
-					$parts = explode(':', $key);
-					$parts = array_map('trim', $parts);
-					
-					if (!isset($content[$parts[1]])) {
-						$skippedOne = true;
-						continue;
-					}
-					
-					$progress = true;
-					$content[$parts[0]] = array_merge($content[$parts[1]], $vals);
-					unset($content[$key]);
-				}
-			}
-		}
-		
-		if ($depFound && !$progress) {
-			return false;
-		}
-		
-		return $content;
-	}
-}
-
-abstract class ViewModel {
-	public static function from(array $data) {
-		$result = null;
-
-		foreach ($data as $key => $val) {
-			if (is_numeric($key)) {
-				return new static(...$data);
-			}
-			else {
-				if (is_null($result)) {
-					$result = new static();
-				}
-
-				if (property_exists(static::class, $key)) {
-					$result->$key = $val;
-				}
-			}
-		}
-
-		return $result;
-	}
-}
-
-interface IFormValidationResult {
-	/**
-	 * Returns the transformed data from the FormSpec
-	 * 
-	 * @return array 
-	 */
-	function getData(): array;
-	/**
-	 *  Returns the transformed data for the given field
-	 * 
-	 * @param mixed $name 
-	 * @return mixed 
-	 */
-	function getFieldData($name);
-	/**
-	 * Returns whether there are any errors set
-	 * 
-	 * @return bool 
-	 */
-	function hasErrors(): bool;
-	/**
-	 * Returns all the errors set for a given field
-	 * 
-	 * @param string $name 
-	 * @return mixed 
-	 */
-	function getFieldErrors($name);
-	/**
-	 * Returns the total number of errors
-	 * 
-	 * @return int 
-	 */
-	function errorCount(): int;
-	/**
-	 * Returns all the errors set
-	 * 
-	 * @return array 
-	 */
-	function getAllErrors(): array;
-}
-
-interface IFormValidator {
-	/**
-	 * Runs form validators against given data
-	 * 
-	 * @param array $data 
-	 * @param bool $allErrors
-	 * @return IFormValidationResult 
-	 */
-	function validate(array $data, bool $allErrors = false): IFormValidationResult;
-}
-
-interface IFormFieldSpec {
-	/**
-	 * Sets the field as required
-	 * 
-	 * @param string $message
-	 * @return static
-	 */
-	function setRequired($message = ''): IFormFieldSpec;
-	/**
-	 * Uses the result of the given callback to determine if this field is required
-	 * 
-	 * @param string $message
-	 * @param callable<FormValidator> $conditional 
-	 * @return IFormFieldSpec 
-	 */
-	function setConditionalRequired(callable $conditional, $message = ''): IFormFieldSpec;
-	/**
-	 * Casts given values for this field to string
-	 * 
-	 * @return IFormFieldSpec 
-	 */
-	function setStringType(): IFormFieldSpec;
-	/**
-	 * Casts given values for this field to int
-	 * 
-	 * @return IFormFieldSpec 
-	 */
-	function setIntType(): IFormFieldSpec;
-	/**
-	 * Casts given values for this field to bool
-	 * 
-	 * @return IFormFieldSpec 
-	 */
-	function setBoolType(): IFormFieldSpec;
-	/**
-	 * Sets this field as being an array of values
-	 * 
-	 * @return IFormFieldSpec 
-	 */
-	function setIsArray(): IFormFieldSpec;
-	/**
-	 * Provides a tranformation function for the field value
-	 * 
-	 * @param callable $transformer 
-	 * @return IFormFieldSpec 
-	 */
-	function setValueTranformer($transformer): IFormFieldSpec;
-	/**
-	 * Ensures the value matches the given regex
-	 * 
-	 * @param string $regex 
-	 * @param string $message 
-	 * @return IFormFieldSpec 
-	 */
-	function addRegexValidator($regex, $message = ''): IFormFieldSpec;
-	/**
-	 * Ensures the value is within a certain range
-	 * 
-	 * @param mixed|null $minValue 
-	 * @param mixed|null $maxValue 
-	 * @param string $message 
-	 * @return IFormFieldSpec 
-	 */
-	function addMinMaxValueValidator($minValue = null, $maxValue = null, $message = ''): IFormFieldSpec;
-	/**
-	 * Ensures the value is within a certain length
-	 * 
-	 * @param mixed|null $minLength 
-	 * @param mixed|null $maxLength 
-	 * @param string $message 
-	 * @return IFormFieldSpec 
-	 */
-	function addLengthValidator($minLength = null, $maxLength = null, $message = ''): IFormFieldSpec;
-	/**
-	 * Ensures the value is one of a given list
-	 * 
-	 * @param array $choices 
-	 * @param string $message 
-	 * @return IFormFieldSpec 
-	 */
-	function addChoiceValidator($choices, $message = ''): IFormFieldSpec;
-	/**
-	 * Runs custom validator against value
-	 * 
-	 * @param callable $callback should return true for success or string for error message
-	 * @return IFormFieldSpec 
-	 */
-	function addCustomValidator($callback): IFormFieldSpec;
-	/**
-	 * Ensures the value is a valid email
-	 * 
-	 * @param string $message 
-	 * @return IFormFieldSpec 
-	 */
-	function addEmailValidator($message = ''): IFormFieldSpec;
-}
-class FormValidationResult implements IFormValidationResult, Countable {
-	private $data = [];
-	private $errors = [];
-	private $errorNum = 0;
-
-	/**
-	 * Sets the data for this result
-	 * 
-	 * @param array $data 
-	 * @return void 
-	 */
-	public function setData(array $data) {
-		$this->data = $data;
-	}
-
-	public function getData(): array {
 		return $this->data;
 	}
 
-	public function getFieldData($name) {
-		return array_key_exists($name, $this->data)
-			? $this->data[$name]
-			: null;
+	public function offsetExists($offset) {
+		$this->load();
+
+		return array_key_exists($offset, $this->data);
 	}
 
-	public function hasErrors(): bool {
-		return $this->errorNum > 0;
+	public function offsetGet($offset) {
+		$this->load();
+
+		return $this->data[$offset];
 	}
 
-	public function errorCount(): int {
-		return $this->errorNum;
+	public function offsetSet($offset, $value) {
+		throw new Exception('Should not set environment variables');
 	}
 
-	public function count() {
-		return $this->errorNum;
+	public function offsetUnset($offset) {
+		throw new Exception('Should not unset environment variables');
 	}
 
-	public function getFieldErrors($name) {
-		return array_key_exists($name, $this->errors)
-			? $this->errors[$name]
-			: null;
+	public function __get($offset) {
+		$this->load();
+
+		return $this->data[$offset];
 	}
 
-	public function addFieldError(string $name, string $msg) {
-		if (!isset($this->errors[$name])) {
-			$this->errors[$name] = [];
-		}
-
-		$this->errors[$name][] = $msg;
-		$this->errorNum++;
+	public function __set($offset, $val) {
+		throw new Exception('Should not set environment variables');
 	}
 
-	public function getAllErrors(): array {
-		return $this->errors;
-	}
-}
+	public function __isset($name) {
+		$this->load();
 
-// TODO: Add FormBuilder that accepts a FormSpec
-class FormSpec {
-	private $fields = [];
-
-	/**
-	 * Adds a field to the form
-	 * 
-	 * @param string $name 
-	 * @return IFormFieldSpec 
-	 */
-	public function addField($name) {
-		$this->fields[$name] = new FormFieldSpec();
-		return $this->fields[$name];
+		return isset($this->data[$name]);
 	}
 
-	/**
-	 * 
-	 * @return IFormValidator
-	 */
-	public function getValidator() {
-		return new FormValidator($this->fields);
+	public function __unset($name) {
+		throw new Exception('Should not unset environment variables');
 	}
 
-	public function getFields() {
-		return $this->fields;
-	}
-}
-
-class FormFieldSpec implements IFormFieldSpec {
-	private $required = false;
-	private $transformer = null;
-	private $isArray = false;
-	private $validators = [];
-
-	public function setRequired($message = ''): IFormFieldSpec {
-		$this->required = function($fieldName) use ($message) {
-			return $message ?: "{$fieldName} is required";
-		};
-
-		return $this;
-	}
-
-	public function setConditionalRequired(callable $conditional, $message = ''): IFormFieldSpec {
-		$this->required = function($fieldName, $form) use ($conditional, $message) {
-			$result = $conditional($fieldName, $form);
-
-			if ($result === true) {
-				return $message ?: "{$fieldName} is required";
-			}
-
-			return $result;
-		};
-
-		return $this;
-	}
-
-	public function setStringType(): IFormFieldSpec {
-		$this->transformer = 'strval';
-		return $this;
-	}
-
-	public function setIntType(): IFormFieldSpec {
-		$this->transformer = 'intval';
-		return $this;
-	}
-
-	public function setBoolType(): IFormFieldSpec {
-		$this->transformer = 'boolval';
-		return $this;
-	}
-
-	public function setIsArray(): IFormFieldSpec {
-		$this->isArray = true;
-		return $this;
-	}
-
-	public function setValueTranformer($transformer): IFormFieldSpec {
-		$this->transformer = $transformer;
-		return $this;
-	}
-
-	function addRegexValidator($regex, $message = ''): IFormFieldSpec {
-		$this->validators[] = function($value, $fieldName) use ($message, $regex) {
-			if (!preg_match($regex, $value)) {
-				return $message ?: "{$fieldName} should match regex";
-			}
-
-			return true;
-		};
-
-		return $this;
-	}
-
-	function addMinMaxValueValidator($minValue = null, $maxValue = null, $message = ''): IFormFieldSpec {
-		$this->validators[] = function($value, $fieldName) use ($message, $minValue, $maxValue) {
-			if (!$message) {
-				$message = "{$fieldName} should be ";
-				if (!is_null($minValue)) {
-					$message .= 'greater than ' . $minValue . ' and ';
-				}
-	
-				if (!is_null($maxValue)) {
-					$message .= 'less than ' . $maxValue;
-				}
-			}
-
-			if (!is_null($minValue) && $value < $minValue) {
-				return $message;
-			}
-
-			if (!is_null($maxValue) && $value > $maxValue) {
-				return $message;
-			}
-
-			return true;
-		};
-
-		return $this;
-	}
-
-	function addLengthValidator($minLength = null, $maxLength = null, $message = ''): IFormFieldSpec {
-		$this->validators[] = function($value, $fieldName) use ($message, $minLength, $maxLength) {
-			if (!$message) {
-				$message = "{$fieldName} should have a length ";
-				if (!is_null($minLength)) {
-					$message .= 'greater than ' . $minLength . ' and ';
-				}
-	
-				if (!is_null($maxLength)) {
-					$message .= 'less than ' . $maxLength;
-				}
-			}
-
-			if (!is_null($minLength) && strlen($value) < $minLength) {
-				return $message;
-			}
-
-			if (!is_null($maxLength) && strlen($value) > $maxLength) {
-				return $message;
-			}
-
-			return true;
-		};
-
-		return $this;
-	}
-
-	function addChoiceValidator($choices, $message = ''): IFormFieldSpec {
-		$this->validators[] = function($value, $fieldName) use ($message, $choices) {
-			if (!in_array($value, $choices)) {
-				return $message ?: "{$fieldName} should be one of " . implode(', ', $choices);
-			}
-
-			return true;
-		};
-
-		return $this;
-	}
-
-	function addCustomValidator($callback): IFormFieldSpec {
-		$this->validators[] = $callback;
-
-		return $this;
-	}
-
-	function addEmailValidator($message = ''): IFormFieldSpec {
-		$this->validators[] = function($value, $fieldName) use ($message) {
-			if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
-				return $message ?: "{$fieldName} should be a valid email address";
-			}
-
-			return true;
-		};
-
-		return $this;
-	}
-
-	/**
-	 * Returns whether this field is required
-	 * 
-	 * @param FormValidator $form 
-	 * @return bool 
-	 */
-	public function getIsRequired(FormValidator $form, $fieldName) {
-		$value = $this->required;
-
-		if (is_callable($value)) {
-			$value = $value($fieldName, $form);
-		}
-
-		return $value;
-	}
-
-	/**
-	 * Transforms value type
-	 * 
-	 * @param mixed $value 
-	 * @return mixed 
-	 */
-	public function transformValue($value) {
-		if ($this->transformer) {
-			$fn = $this->transformer;
-			$value = $fn($value);
-		}
-
-		return $value;
-	}
-
-	/**
-	 * Returns array of error messages
-	 * 
-	 * @param mixed $value 
-	 * @param FormValidator $form 
-	 * @param bool $allErrors 
-	 * @return array 
-	 */
-	public function isValid($value, FormValidator $form, $fieldName, $allErrors) {
-		$errors = [];
-
-		if ($this->isArray && !is_array($value)) {
-			$errors[] = 'array expected';
-
-			if (!$allErrors) {
-				return $errors;
-			}
-		}
-
-		if (!is_array($value)) {
-			$value = [$value];
-		}
-
-		foreach ($value as $val) {
-			foreach ($this->validators as $fn) {
-				$result = $fn($val, $fieldName, $form);
-	
-				if (is_string($result)) {
-					$errors[] = $result;
-
-					if (!$allErrors) {
-						return $errors;
-					}
-				}
-			}
-		}
-
-		return $errors;
-	}
-}
-
-class FormValidator implements IFormValidator {
-	/** @var FormFieldSpec[] */
-	private $fields;
-
-	/** @var array */
-	private $data = null;
-
-	public function __construct($fields) {
-		$this->fields = $fields;
-	}
-
-	public function validate(array $data, bool $allErrors = false): IFormValidationResult {
+	private function load() {
 		if (!is_null($this->data)) {
-			throw new Exception('validate already running');
+			return;
 		}
 
-		$this->data = $data;
-		$result = new FormValidationResult();
+		$filePaths = [
+			WEB_ROOT . '/local.env',
+			WEB_ROOT . '/' . ENVIRONMENT . '.env'
+		];
 
-		// Transform values
-		foreach ($this->fields as $fieldName => $field) {
-			try {
-				$value = $this->getFieldValue($fieldName);
-				$this->data[$fieldName] = empty($value)
-					? null
-					: $field->transformValue($this->getFieldValue($fieldName));
-			}
-			catch (Exception $e) {
-				$result->addFieldError($fieldName, $e->getMessage());
+		foreach ($filePaths as $path) {
+			if (file_exists($path)) {
+				$this->data = parse_ini_file($path, true, INI_SCANNER_TYPED) ?: [];
+				break;
 			}
 		}
-
-		// Validate
-		foreach ($this->fields as $fieldName => $field) {
-			try {
-				$value = $this->getFieldValue($fieldName);
-				
-				// Is empty?
-				if (empty($value)) {
-					// Check is required
-					$requiredMessage = $field->getIsRequired($this, $fieldName);
-					if ($requiredMessage) {
-						$result->addFieldError($fieldName, $requiredMessage);
-
-						if (!$allErrors) {
-							continue;
-						}
-					}
-					else {
-						continue;
-					}
-				}
-
-				// Run validators
-				$errors = $field->isValid($value, $this, $fieldName, $allErrors);
-				foreach ($errors as $message) {
-					$result->addFieldError($fieldName, $message);
-				}
-			}
-			catch (Exception $e) {
-				$result->addFieldError($fieldName, $e->getMessage());
-			}
-		}
-
-		$result->setData($this->data);
-		$this->data = null;
-
-		return $result;
 	}
 
-	/**
-	 * Fetches a value for a field by name
-	 * 
-	 * @param string $name 
-	 * @return mixed 
-	 */
-	public function getFieldValue($name) {
-		return array_key_exists($name, $this->data)
-			? $this->data[$name]
-			: null;
+	public static function init() {
+		global $_ENV;
+		$_ENV = new self();
 	}
 }
