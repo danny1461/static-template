@@ -32,6 +32,9 @@
 	meta('twitter:title', 'Site Title');
 
 	header_resources();
+
+	// match the $collapse var in your _vars.scss file
+	$collapse = "lg";
 	?>
 </head>
 
@@ -53,20 +56,35 @@
 	<?php endif; ?>
 
 	<header class="site-header">
-		<nav class="navbar navbar-expand-lg navbar-light bg-light">
+		<nav class="navbar navbar-expand-<?= $collapse ?> navbar-light bg-light">
 			<div class="container-fluid">
 				<a class="navbar-brand" href="#">
 					<img src="<?php echo publicUrl('images/logo.png') ?>" class="img-fluid" alt="Go to home page">
 				</a>
+
 				<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav" aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation">
-					<span class="navbar-toggler-icon"></span>
+					<span class="icon-bar"></span>
+					<span class="icon-bar icon-bar-x"></span>
+					<span class="icon-bar icon-bar-x icon-bar-sneaky"></span>
+					<span class="icon-bar"></span>
+					<span class="visually-hidden">Toggle navigation</span>
 				</button>
+
 				<div class="collapse navbar-collapse ml-lg-auto" id="main-nav">
-					<ul class="navbar-nav me-auto mb-2 mb-lg-0">
+					<ul class="navbar-nav mx-auto ms-<?= $collapse ?>-auto me-<?= $collapse ?>-0 mb-2 mb-lg-0">
 						<li class="nav-item <?php echo get_request_uri() == '' ? 'active' : '' ?>">
 							<a class="nav-link" aria-current="page" href="<?php echo baseUrl() ?>">Home</a>
 						</li>
-						<li class="nav-item <?php echo get_request_uri() == 'subpage' ? 'active' : '' ?>">
+						<li class="nav-item dropdown">
+							<a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+								Dropdown
+							</a>
+							<ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+								<li><a class="dropdown-item" href="#">Action</a></li>
+								<li><a class="dropdown-item" href="#">Another action</a></li>
+							</ul>
+						</li>
+						<li class="nav-item cta <?php echo get_request_uri() == 'subpage' ? 'active' : '' ?>">
 							<a class="nav-link" href="<?php echo baseUrl('subpage') ?>">Subpage</a>
 						</li>
 					</ul>
