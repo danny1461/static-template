@@ -7,3 +7,8 @@
 	RewriteRule ^.*$ - [NC,L]
 	RewriteRule ^.*$ index.php [NC,L]
 </IfModule>
+
+<Files "config.json">  
+  Order Allow,Deny
+  Deny from all
+</Files>
