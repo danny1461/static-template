@@ -21,7 +21,6 @@
 
 	<?php
 	stylesheet_register('fonts', 'https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600|Roboto:300,400,700');
-	stylesheet_register('bootstrap',  publicUrl('css/bootstrap.min.css?ver=4.0.0'));
 	stylesheet_enqueue('style', publicUrl('css/style.min.css'), ['fonts', 'bootstrap']);
 
 	script_register('fa-all', publicUrl('js/fa/all.min.js'));
