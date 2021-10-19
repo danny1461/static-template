@@ -21,7 +21,7 @@ if (file_exists(WEB_ROOT . '/libs/vendor/autoloader.php')) {
 }
 
 spl_autoload_register(function($classOrFunction) {
-	$filePath = WEB_ROOT . '/libs/' . $classOrFunction . '.php';
+	$filePath = WEB_ROOT . '/libs/' . str_replace('\\', '/', $classOrFunction) . '.php';
 	if (is_file($filePath)) {
 		include $filePath;
 	}
