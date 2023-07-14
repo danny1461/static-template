@@ -1210,29 +1210,29 @@ MM.           MM   ,pm9MM  `YMMMa. `YMMMa. 8M"""""" `YMMMa.
 class EnvShim implements ArrayAccess, JsonSerializable {
 	private $data = null;
 
-	public function jsonSerialize() {
+	public function jsonSerialize(): mixed {
 		$this->load();
 
 		return $this->data;
 	}
 
-	public function offsetExists($offset) {
+	public function offsetExists($offset): bool {
 		$this->load();
 
 		return array_key_exists($offset, $this->data);
 	}
 
-	public function offsetGet($offset) {
+	public function offsetGet($offset): mixed {
 		$this->load();
 
 		return $this->data[$offset];
 	}
 
-	public function offsetSet($offset, $value) {
+	public function offsetSet($offset, $value): void {
 		throw new Exception('Should not set environment variables');
 	}
 
-	public function offsetUnset($offset) {
+	public function offsetUnset($offset): void {
 		throw new Exception('Should not unset environment variables');
 	}
 
