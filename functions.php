@@ -1005,6 +1005,7 @@ INLINE;
 				old(e);
 			if (e.ctrlKey && e.keyCode == 123)
 			{
+				e.preventDefault();
 				var classes = d.body.className.split(' ');
 				if (classes.indexOf('da-devel') != -1)
 				{
