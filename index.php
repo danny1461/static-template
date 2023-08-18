@@ -7,7 +7,7 @@
 
 define('WEB_ROOT', dirname($_SERVER['SCRIPT_FILENAME']));
 define('ISLOCAL',
-	in_array($_SERVER['REMOTE_ADDR'], array('127.0.0.1'))
+	in_array($_SERVER['REMOTE_ADDR'], array('127.0.0.1', '::1'))
 );
 
 if (!isset($_SERVER['ENVIRONMENT'])) {
